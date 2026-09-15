@@ -215,7 +215,7 @@
     </header>
 
     <section class="viewer" aria-label="Deer vision camera preview">
-      <video id="video" playsinline muted></video>
+      <video id="video" playsinline muted autoplay></video>
       <canvas id="canvas"></canvas>
       <div id="cameraPrompt" class="cameraPrompt">
         <div>Point this at clothing, blinds, trees, or your hunting setup.</div>
@@ -322,7 +322,13 @@
       status.textContent = 'This browser does not expose camera access. Open the app in Safari/Chrome over HTTPS.';
       return;
     }
+
+    startBtn.disabled = true;
+    startBtn.textContent = 'Starting…';
+    status.textContent = 'Starting camera…';
+
     await stopCamera();
+
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -332,14 +338,51 @@
         },
         audio: false
       });
+
       video.srcObject = stream;
-      await video.play();
+      video.muted = true;
+      video.setAttribute('playsinline', '');
+      video.setAttribute('autoplay', '');
+
+      // iOS Safari can grant permission before video dimensions are ready.
+      // Wait briefly for metadata, then explicitly play and start rendering.
+      if (video.readyState < 1) {
+        await new Promise(resolve => {
+          let finished = false;
+          const done = () => {
+            if (finished) return;
+            finished = true;
+            video.removeEventListener('loadedmetadata', done);
+            resolve();
+          };
+          video.addEventListener('loadedmetadata', done, { once: true });
+          setTimeout(done, 1200);
+        });
+      }
+
+      try {
+        await video.play();
+      } catch (_) {
+        // Autoplay + muted + playsinline handles most iOS cases.
+        // A second play attempt below covers delayed permission/metadata.
+        await new Promise(r => setTimeout(r, 150));
+        try { await video.play(); } catch (_) {}
+      }
+
       prompt.style.display = 'none';
       resizeCanvas();
-      render();
+
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(render);
+
+      status.textContent = 'Approximation only — a phone camera cannot reproduce deer UV sensitivity or brain processing.';
     } catch (err) {
+      console.error(err);
       status.textContent = 'Camera access failed. Allow camera permission and make sure the page is opened over HTTPS.';
       prompt.style.display = 'flex';
+    } finally {
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start Camera';
     }
   }
 
