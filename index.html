@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#101613" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Deer Vision" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <title>Deer Vision Camera</title>
+  <style>
+    :root{
+      --bg:#0d1210;
+      --panel:#151d19;
+      --panel2:#1c2721;
+      --text:#f4f7f5;
+      --muted:#aebbb3;
+      --accent:#d9a441;
+      --accent2:#7eb1db;
+      --danger:#ef6a60;
+      --border:#2a3930;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      min-height:100vh;
+    }
+    .app{
+      max-width:900px;
+      margin:0 auto;
+      padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 22px);
+    }
+    header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:10px;
+    }
+    h1{
+      margin:0;
+      font-size:clamp(1.25rem,4vw,1.7rem);
+      letter-spacing:.01em;
+    }
+    .badge{
+      font-size:.75rem;
+      color:var(--muted);
+      border:1px solid var(--border);
+      padding:6px 8px;
+      border-radius:999px;
+      white-space:nowrap;
+    }
+    .viewer{
+      position:relative;
+      background:#000;
+      border:1px solid var(--border);
+      border-radius:16px;
+      overflow:hidden;
+      aspect-ratio:3/4;
+      max-height:72vh;
+    }
+    video, canvas{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+    video{opacity:0; pointer-events:none}
+    .hud{
+      position:absolute;
+      top:10px;
+      left:10px;
+      right:10px;
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      pointer-events:none;
+    }
+    .hud .mode{
+      background:rgba(0,0,0,.62);
+      border:1px solid rgba(255,255,255,.15);
+      padding:7px 10px;
+      border-radius:999px;
+      font-weight:700;
+      font-size:.8rem;
+      backdrop-filter:blur(6px);
+    }
+    .crosshair{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      width:34px;
+      height:34px;
+      opacity:.5;
+      pointer-events:none;
+    }
+    .crosshair:before,.crosshair:after{
+      content:"";
+      position:absolute;
+      background:#fff;
+    }
+    .crosshair:before{width:1px;height:34px;left:16px;top:0}
+    .crosshair:after{height:1px;width:34px;top:16px;left:0}
+    .status{
+      position:absolute;
+      bottom:10px;
+      left:10px;
+      right:10px;
+      background:rgba(0,0,0,.62);
+      border:1px solid rgba(255,255,255,.15);
+      padding:9px 10px;
+      border-radius:12px;
+      font-size:.78rem;
+      color:#f1f1f1;
+      backdrop-filter:blur(6px);
+    }
+    .controls{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+      margin-top:10px;
+    }
+    button, select, input[type="range"]{
+      font:inherit;
+    }
+    button{
+      min-height:48px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      color:var(--text);
+      background:var(--panel);
+      font-weight:700;
+      padding:8px 10px;
+    }
+    button.active{
+      background:var(--accent);
+      border-color:var(--accent);
+      color:#15110a;
+    }
+    button:disabled{opacity:.45}
+    .panel{
+      margin-top:10px;
+      padding:12px;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:14px;
+    }
+    .panel h2{
+      font-size:1rem;
+      margin:0 0 8px;
+    }
+    .row{
+      display:grid;
+      grid-template-columns:1fr auto;
+      align-items:center;
+      gap:12px;
+      margin-top:9px;
+    }
+    .row label{color:var(--muted); font-size:.9rem}
+    input[type="range"]{width:160px}
+    .score{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-top:10px;
+      padding-top:10px;
+      border-top:1px solid var(--border);
+    }
+    .score strong{font-size:1.15rem}
+    .note{
+      color:var(--muted);
+      font-size:.8rem;
+      line-height:1.4;
+      margin:9px 0 0;
+    }
+    .cameraPrompt{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+      height:100%;
+      padding:24px;
+      text-align:center;
+      color:var(--muted);
+    }
+    .cameraPrompt button{
+      background:var(--accent);
+      color:#15110a;
+      border-color:var(--accent);
+      min-width:180px;
+    }
+    @media (max-width:560px){
+      .controls{grid-template-columns:repeat(2,1fr)}
+      .viewer{aspect-ratio:3/4}
+      .row{grid-template-columns:1fr}
+      input[type="range"]{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>White-Tailed Deer Vision</h1>
+      <div class="badge">Camera simulation</div>
+    </header>
+
+    <section class="viewer" aria-label="Deer vision camera preview">
+      <video id="video" playsinline muted></video>
+      <canvas id="canvas"></canvas>
+      <div id="cameraPrompt" class="cameraPrompt">
+        <div>Point this at clothing, blinds, trees, or your hunting setup.</div>
+        <button id="startBtn" type="button">Start Camera</button>
+        <div style="font-size:.78rem">Camera permission is required. HTTPS is normally required outside localhost.</div>
+      </div>
+
+      <div class="hud">
+        <div id="modeBadge" class="mode">DEER COLOR</div>
+      </div>
+      <div class="crosshair" aria-hidden="true"></div>
+      <div id="status" class="status">Approximation only — a phone camera cannot reproduce deer UV sensitivity or brain processing.</div>
+    </section>
+
+    <section class="controls" aria-label="Vision mode controls">
+      <button id="humanBtn" type="button">Human</button>
+      <button id="deerBtn" type="button" class="active">Deer Color</button>
+      <button id="duskBtn" type="button">Dawn / Dusk</button>
+      <button id="motionBtn" type="button">Movement</button>
+    </section>
+
+    <section class="panel">
+      <h2>Simulation strength</h2>
+      <div class="row">
+        <label for="strength">Deer color transformation</label>
+        <input id="strength" type="range" min="0" max="100" value="85" />
+      </div>
+      <div class="row">
+        <label for="brightness">Low-light brightness</label>
+        <input id="brightness" type="range" min="80" max="180" value="125" />
+      </div>
+      <div class="row">
+        <label for="motionSensitivity">Movement sensitivity</label>
+        <input id="motionSensitivity" type="range" min="10" max="90" value="34" />
+      </div>
+
+      <div class="score">
+        <div>
+          <div style="color:var(--muted);font-size:.83rem">Blue prominence in center</div>
+          <strong id="blueScore">—</strong>
+        </div>
+        <button id="flipBtn" type="button">Flip Camera</button>
+      </div>
+      <p class="note">
+        The blue score is a camera-based estimate of how strongly short-wavelength/blue material stands out in the center of frame.
+        It is not a UV detector; most phone cameras filter ultraviolet light.
+      </p>
+    </section>
+  </main>
+
+<script>
+(() => {
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const startBtn = document.getElementById('startBtn');
+  const prompt = document.getElementById('cameraPrompt');
+  const status = document.getElementById('status');
+  const modeBadge = document.getElementById('modeBadge');
+  const humanBtn = document.getElementById('humanBtn');
+  const deerBtn = document.getElementById('deerBtn');
+  const duskBtn = document.getElementById('duskBtn');
+  const motionBtn = document.getElementById('motionBtn');
+  const flipBtn = document.getElementById('flipBtn');
+  const strength = document.getElementById('strength');
+  const brightness = document.getElementById('brightness');
+  const motionSensitivity = document.getElementById('motionSensitivity');
+  const blueScore = document.getElementById('blueScore');
+
+  let stream = null;
+  let facingMode = 'environment';
+  let mode = 'deer';
+  let raf = 0;
+  let prevFrame = null;
+  let lastScoreAt = 0;
+
+  function setMode(next) {
+    mode = next;
+    [humanBtn, deerBtn, duskBtn, motionBtn].forEach(b => b.classList.remove('active'));
+    const map = {
+      human:[humanBtn,'HUMAN VIEW'],
+      deer:[deerBtn,'DEER COLOR'],
+      dusk:[duskBtn,'DAWN / DUSK'],
+      motion:[motionBtn,'MOVEMENT']
+    };
+    map[next][0].classList.add('active');
+    modeBadge.textContent = map[next][1];
+  }
+
+  humanBtn.addEventListener('click', () => setMode('human'));
+  deerBtn.addEventListener('click', () => setMode('deer'));
+  duskBtn.addEventListener('click', () => setMode('dusk'));
+  motionBtn.addEventListener('click', () => setMode('motion'));
+
+  async function stopCamera() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    cancelAnimationFrame(raf);
+    prevFrame = null;
+  }
+
+  async function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      status.textContent = 'This browser does not expose camera access. Open the app in Safari/Chrome over HTTPS.';
+      return;
+    }
+    await stopCamera();
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 1920 }
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      prompt.style.display = 'none';
+      resizeCanvas();
+      render();
+    } catch (err) {
+      status.textContent = 'Camera access failed. Allow camera permission and make sure the page is opened over HTTPS.';
+      prompt.style.display = 'flex';
+    }
+  }
+
+  function resizeCanvas() {
+    const vw = video.videoWidth || 720;
+    const vh = video.videoHeight || 1280;
+    const maxW = 720;
+    const scale = Math.min(1, maxW / vw);
+    canvas.width = Math.max(1, Math.round(vw * scale));
+    canvas.height = Math.max(1, Math.round(vh * scale));
+  }
+
+  window.addEventListener('resize', () => {
+    if (stream) resizeCanvas();
+  });
+
+  startBtn.addEventListener('click', startCamera);
+
+  flipBtn.addEventListener('click', async () => {
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    await startCamera();
+  });
+
+  function deerTransform(data, mix, duskMode=false) {
+    const bright = Number(brightness.value) / 100;
+    for (let i=0; i<data.length; i+=4) {
+      const r = data[i], g = data[i+1], b = data[i+2];
+
+      // Collapse red/green discrimination into a shared yellow-green luminance signal.
+      const yg = 0.56 * r + 0.44 * g;
+      let dr = 0.78 * yg + 0.06 * b;
+      let dg = 0.84 * yg + 0.10 * b;
+      let db = 0.28 * yg + 0.88 * b;
+
+      if (duskMode) {
+        const lum = 0.22*r + 0.66*g + 0.12*b;
+        dr = lum * 0.90;
+        dg = lum * 0.98;
+        db = lum * 1.05;
+      }
+
+      data[i]   = Math.max(0, Math.min(255, (r*(1-mix) + dr*mix) * (duskMode ? bright : 1)));
+      data[i+1] = Math.max(0, Math.min(255, (g*(1-mix) + dg*mix) * (duskMode ? bright : 1)));
+      data[i+2] = Math.max(0, Math.min(255, (b*(1-mix) + db*mix) * (duskMode ? bright : 1)));
+    }
+  }
+
+  function movementOverlay(img) {
+    const data = img.data;
+    const threshold = Number(motionSensitivity.value);
+    if (!prevFrame || prevFrame.length !== data.length) {
+      prevFrame = new Uint8ClampedArray(data);
+      return;
+    }
+
+    for (let i=0; i<data.length; i+=4) {
+      const d =
+        Math.abs(data[i]-prevFrame[i]) +
+        Math.abs(data[i+1]-prevFrame[i+1]) +
+        Math.abs(data[i+2]-prevFrame[i+2]);
+
+      const moving = d > threshold * 3;
+      if (moving) {
+        data[i]   = Math.min(255, data[i] + 95);
+        data[i+1] = Math.min(255, data[i+1] + 95);
+        data[i+2] = Math.min(255, data[i+2] + 20);
+      } else {
+        data[i]   *= 0.70;
+        data[i+1] *= 0.70;
+        data[i+2] *= 0.74;
+      }
+    }
+    prevFrame.set(img.data);
+  }
+
+  function centerBlueScore(img) {
+    const w = img.width, h = img.height;
+    const x0 = Math.floor(w*0.38), x1 = Math.floor(w*0.62);
+    const y0 = Math.floor(h*0.38), y1 = Math.floor(h*0.62);
+    const data = img.data;
+    let sum = 0, n = 0;
+
+    for (let y=y0; y<y1; y+=3) {
+      for (let x=x0; x<x1; x+=3) {
+        const i = (y*w+x)*4;
+        const r=data[i], g=data[i+1], b=data[i+2];
+        const blueExcess = Math.max(0, b - (r+g)/2);
+        sum += blueExcess;
+        n++;
+      }
+    }
+    const raw = n ? sum/n : 0;
+    const pct = Math.max(0, Math.min(100, Math.round(raw/1.25)));
+    let label = 'Low';
+    if (pct >= 55) label = 'High';
+    else if (pct >= 25) label = 'Moderate';
+    blueScore.textContent = `${label} · ${pct}%`;
+  }
+
+  function render(ts=0) {
+    if (!stream || video.readyState < 2) {
+      raf = requestAnimationFrame(render);
+      return;
+    }
+
+    if (canvas.width === 0 || canvas.height === 0) resizeCanvas();
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+    const mix = Number(strength.value)/100;
+
+    if (mode === 'deer') {
+      deerTransform(img.data, mix, false);
+    } else if (mode === 'dusk') {
+      deerTransform(img.data, mix, true);
+    } else if (mode === 'motion') {
+      deerTransform(img.data, mix, false);
+      movementOverlay(img);
+    }
+
+    ctx.putImageData(img,0,0);
+
+    if (ts - lastScoreAt > 450) {
+      centerBlueScore(img);
+      lastScoreAt = ts;
+    }
+
+    raf = requestAnimationFrame(render);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && stream) {
+      // Keep browser in control of camera lifecycle when app is backgrounded.
+    }
+  });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
